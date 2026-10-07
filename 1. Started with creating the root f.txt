@@ -1,0 +1,30 @@
+1. Started with creating the root files
+2. created server with uvicorn with fastapi,fast api is for routing,api,documents mechanism
+3. app.py will act as server and started the server and successfully connected with fastapi
+4. created upload.py and tested it, it is been successfully working, the will is been saving in the desired location
+5. created pdf_reader to read the uploaded pdf, i faced error with older version in pymupdf,so i deleted the package and reinstalled with latest version
+6. with the help of pymupfd i can read the texts from the documents [ i can use pandas also]
+7. Extracted text is been converted to vectors with the help of sentence_transformer
+8. I create the vector db to store vectors
+9. then these vectors are store in vector db with the help of chroma db module it is an sqlite db
+10. Data stored in the db format is chunk number, text, vector
+11. retival will be fast with the help of searching vector, when user give an text to search, the text will 
+be converted to vector and this will be searched in the vector db, if the search is successful then
+text will be returned
+12. I i need to retive the data,for that i am using similarity search, the similarity search is Nearest Neighbour search
+,in there i am using cosine search, if the angle val is less then similarty is more and vice versa
+13. I created a retival code ,from which the data is been fetched 
+14. I gave some text to seach vdb to search, but the returned data is not accurate because
+I already stored an pdf in the vdb, so result was not accurate,----PROBLEM FACED-----
+15. even thought there are two pdf present in the vdb the result need to be fetched,
+but is not coming.---PROBLEM FACED---
+16. I over come with an idea to change the model from all-MiniLM-L6-v2 to intfloat-e5-base-v7 
+17. all-MiniLM-L6-v2 what good and it made fast retival,but it did not give accurate results
+18. I switched to intfloat-e5-base-v7 which was good and fast,but still the result was not better
+19. So i decided to change the dataset from my resume to original legal document,beacuse original 
+legal document has an structure.
+20. By doing that i got accurate results.
+21. I stopped the Frontend and started to work in Frontend
+22. In frontend i started to create root files
+23. After creating root files,i started with navbar,Next is hero section ,i generated a imgae for hero section
+after that i added parallax for that image with parallax package

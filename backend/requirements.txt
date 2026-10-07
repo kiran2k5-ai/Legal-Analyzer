@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pymupdf
+sentence-transformers
+chromadb
+motor
+passlib[bcrypt]
+pyjwt
+pydantic
+pydantic-settings
+requests
+python-multipart
+python-dotenv
+email-validator
+
