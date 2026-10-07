@@ -11,7 +11,7 @@ client = AsyncIOMotorClient(MONGODB_URL)
 
 db = client[DATABASE_NAME]
 
-
 users_collection = db["users"]
 documents_collection = db["documents"]
 chat_collection = db["chat_history"]
+chat_sessions_collection = db["chat_sessions"]

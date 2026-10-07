@@ -5,13 +5,18 @@ import { api } from "../services/api";
 import { 
   Send, 
   Sparkles, 
-  BookOpen, 
   ChevronRight, 
   Loader2, 
   MessageSquare, 
-  FileText,
-  AlertCircle,
-  PlusCircle
+  FileText, 
+  AlertCircle, 
+  PlusCircle,
+  Trash2,
+  UploadCloud,
+  FilePlus,
+  Clock,
+  History,
+  FolderOpen
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -23,23 +28,35 @@ function Chat() {
   const [activeCitations, setActiveCitations] = useState([]);
   const [selectedCitation, setSelectedCitation] = useState(null);
 
+  // ChatGPT-style Multi-Session State
+  const [sessions, setSessions] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+
+  // Sidebar management
+  const [sidebarTab, setSidebarTab] = useState("docs"); // "docs" | "history"
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const fileInputRef = useRef(null);
+
   const messagesEndRef = useRef(null);
 
-  const fetchChatHistory = async () => {
+  // Fetch list of saved consultation sessions (ChatGPT style)
+  const fetchSessions = async () => {
     try {
-      const res = await api.getChatHistory();
-      if (res && res.messages) {
-        setMessages(res.messages);
+      const res = await api.getChatSessions();
+      if (res && res.sessions) {
+        setSessions(res.sessions);
       }
     } catch (err) {
-      console.error("Error loading chat history:", err);
+      console.error("Error loading chat sessions:", err);
     }
   };
 
+  // Initial load
   useEffect(() => {
     if (token) {
       fetchDocuments();
-      fetchChatHistory();
+      fetchSessions();
     }
   }, [token]);
 
@@ -48,6 +65,7 @@ function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Send a chat message
   const handleSendChat = async (e) => {
     e.preventDefault();
     if (!prompt.trim() || loading) return;
@@ -56,30 +74,42 @@ function Chat() {
     setPrompt("");
     setLoading(true);
 
-    // Append user message
-    setMessages((prev) => [...prev, { sender: "user", text: userQuery }]);
+    // Optimistically append user message
+    setMessages((prev) => [
+      ...prev, 
+      { sender: "user", text: userQuery, timestamp: new Date().toISOString() }
+    ]);
 
     try {
-      const response = await api.sendChatMessage(userQuery);
+      const response = await api.sendChatMessage(userQuery, currentSessionId);
       
+      // Update session ID if it was a new consultation
+      if (response.session_id) {
+        setCurrentSessionId(response.session_id);
+      }
+
       // Append AI message
       setMessages((prev) => [
         ...prev, 
         { 
           sender: "ai", 
           text: response.answer, 
-          citations: response.citations 
+          citations: response.citations,
+          timestamp: new Date().toISOString()
         }
       ]);
 
       // Set current citations to show on the right panel
       if (response.citations && response.citations.length > 0) {
         setActiveCitations(response.citations);
-        setSelectedCitation(response.citations[0]); // Select first by default
+        setSelectedCitation(response.citations[0]);
       } else {
         setActiveCitations([]);
         setSelectedCitation(null);
       }
+
+      // Refresh the sessions list so new conversation appears in the sidebar
+      fetchSessions();
 
     } catch (err) {
       setMessages((prev) => [
@@ -99,15 +129,103 @@ function Chat() {
     setSelectedCitation(citation);
   };
 
-  const handleNewChat = async () => {
-    try {
-      await api.clearChatHistory();
-    } catch (err) {
-      console.error("Failed to clear chat history on server:", err);
-    }
+  // Start a new consultation: ONLY clears the active screen, DOES NOT erase history!
+  const handleNewChat = () => {
+    setCurrentSessionId(null);
     setMessages([]);
     setActiveCitations([]);
     setSelectedCitation(null);
+  };
+
+  // Switch to a previous consultation session
+  const handleSelectSession = async (sessionId) => {
+    if (sessionId === currentSessionId) return;
+
+    setCurrentSessionId(sessionId);
+    setLoading(true);
+    try {
+      const detail = await api.getSessionDetail(sessionId);
+      const sessionMessages = detail.messages || [];
+      setMessages(sessionMessages);
+
+      // Find citations from last AI message
+      const lastAiMsg = [...sessionMessages].reverse().find((m) => m.sender === "ai");
+      if (lastAiMsg && lastAiMsg.citations && lastAiMsg.citations.length > 0) {
+        setActiveCitations(lastAiMsg.citations);
+        setSelectedCitation(lastAiMsg.citations[0]);
+      } else {
+        setActiveCitations([]);
+        setSelectedCitation(null);
+      }
+    } catch (err) {
+      console.error("Failed to load consultation session:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete a single conversation session
+  const handleDeleteSession = async (e, sessionId) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this consultation from history?")) {
+      return;
+    }
+
+    try {
+      await api.deleteChatSession(sessionId);
+      if (currentSessionId === sessionId) {
+        handleNewChat();
+      }
+      fetchSessions();
+    } catch (err) {
+      console.error("Failed to delete session:", err);
+      alert(err.message || "Failed to delete session.");
+    }
+  };
+
+  // Add PDF directly from sidebar
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      alert("Please upload a PDF file.");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await api.uploadDocument(file);
+      await fetchDocuments();
+      setSidebarTab("docs"); // Make sure documents tab is visible
+    } catch (err) {
+      console.error("Failed to upload document:", err);
+      alert(err.message || "Failed to upload and index document.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // Remove PDF directly from sidebar
+  const handleDeleteDocument = async (e, docId, filename) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to remove "${filename}" from your knowledge base?`)) {
+      return;
+    }
+
+    setDeletingId(docId);
+    try {
+      await api.deleteDocument(docId);
+      await fetchDocuments();
+    } catch (err) {
+      console.error("Failed to delete document:", err);
+      alert(err.message || "Failed to remove document.");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -117,61 +235,234 @@ function Chat() {
       {/* Main Workspace */}
       <div className="flex flex-1 pt-20 overflow-hidden">
         
-        {/* Left Panel: Library & Control */}
-        <aside className="hidden w-[280px] flex-col border-r border-gray-200 bg-white p-6 lg:flex">
+        {/* Left Panel: ChatGPT-Style Sidebar */}
+        <aside className="hidden w-[320px] flex-col border-r border-gray-200 bg-white p-5 lg:flex shadow-sm">
           
+          {/* New Consultation Button (Does NOT erase history, just starts a fresh screen) */}
           <button
             onClick={handleNewChat}
-            className="flex items-center justify-center gap-2 rounded-lg bg-[#081827] px-4 py-3 text-sm font-semibold text-white transition hover:bg-black cursor-pointer mb-6"
+            className="flex items-center justify-center gap-2 rounded-xl bg-[#081827] px-4 py-3 text-sm font-semibold text-white transition hover:bg-black cursor-pointer mb-4 shadow-sm"
           >
             <PlusCircle size={16} />
             Start New Consultation
           </button>
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="mb-4 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-gray-400">
-              <span>Active Knowledge Base</span>
-              <span className="rounded bg-slate-100 px-2 py-0.5 text-slate-600 font-mono">
+          {/* Hidden File Input for Sidebar PDF upload */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept=".pdf"
+            className="hidden"
+          />
+
+          {/* Sidebar Segment Tabs */}
+          <div className="flex rounded-lg bg-slate-100 p-1 mb-4 border border-slate-200/60">
+            <button
+              onClick={() => setSidebarTab("docs")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${
+                sidebarTab === "docs"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <FolderOpen size={13} />
+              <span>PDFs</span>
+              <span className="ml-1 rounded-full bg-slate-200/80 px-1.5 py-0.2 text-[10px] font-mono text-slate-700">
                 {documents.length}
               </span>
-            </div>
+            </button>
 
-            {documents.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-gray-400">
-                <p className="text-xs">No active resources indexed.</p>
-                <Link
-                  to="/upload"
-                  className="mt-3 inline-block text-xs font-semibold text-blue-700 hover:underline"
-                >
-                  Upload documents &rarr;
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {documents.map((doc) => (
-                  <div
-                    key={doc.doc_id}
-                    className="flex items-center gap-2.5 rounded-lg border border-slate-100 bg-slate-50/50 p-3 hover:bg-slate-50 transition"
-                  >
-                    <FileText size={16} className="text-slate-400 shrink-0" />
-                    <span 
-                      className="truncate text-xs font-medium text-slate-700" 
-                      title={doc.filename}
-                    >
-                      {doc.filename}
-                    </span>
-                  </div>
-                ))}
-                
-                <Link
-                  to="/upload"
-                  className="mt-4 block text-center text-xs font-semibold text-blue-700 hover:underline"
-                >
-                  Manage Library &rarr;
-                </Link>
-              </div>
-            )}
+            <button
+              onClick={() => setSidebarTab("history")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${
+                sidebarTab === "history"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <History size={13} />
+              <span>History</span>
+              <span className="ml-1 rounded-full bg-slate-200/80 px-1.5 py-0.2 text-[10px] font-mono text-slate-700">
+                {sessions.length}
+              </span>
+            </button>
           </div>
+
+          {/* TAB 1: KNOWLEDGE BASE (ADD / REMOVE PDFS IN-PLACE) */}
+          {sidebarTab === "docs" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Active Knowledge Base
+                </span>
+                
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer transition disabled:opacity-50"
+                  title="Upload a new PDF document"
+                >
+                  <FilePlus size={14} />
+                  <span>+ Add PDF</span>
+                </button>
+              </div>
+
+              {/* Uploading progress banner */}
+              {uploading && (
+                <div className="mb-3 flex items-center gap-2.5 rounded-lg bg-blue-50 border border-blue-200 p-3 text-blue-700 text-xs">
+                  <Loader2 size={16} className="animate-spin shrink-0 text-blue-600" />
+                  <span className="font-medium">Extracting & indexing embeddings...</span>
+                </div>
+              )}
+
+              {/* Document List */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2">
+                {documents.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-gray-400">
+                    <UploadCloud size={28} className="mx-auto mb-2 text-slate-300" />
+                    <p className="text-xs font-medium text-slate-600">No PDFs active</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Upload a PDF to start querying</p>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-[#081827] px-3 py-1.5 text-xs font-semibold text-white hover:bg-black transition cursor-pointer"
+                    >
+                      <FilePlus size={12} />
+                      Upload PDF
+                    </button>
+                  </div>
+                ) : (
+                  documents.map((doc) => (
+                    <div
+                      key={doc.doc_id}
+                      className="group relative flex items-center justify-between rounded-lg border border-slate-200/70 bg-slate-50/70 p-2.5 hover:bg-white hover:border-slate-300 hover:shadow-sm transition"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-slate-200/60 text-slate-600">
+                          <FileText size={14} />
+                        </div>
+                        <div className="min-w-0">
+                          <p 
+                            className="truncate text-xs font-semibold text-slate-800" 
+                            title={doc.filename}
+                          >
+                            {doc.filename}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            {doc.total_chunks ? `${doc.total_chunks} chunks` : "Indexed"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Remove / Delete Button */}
+                      <button
+                        onClick={(e) => handleDeleteDocument(e, doc.doc_id, doc.filename)}
+                        disabled={deletingId === doc.doc_id}
+                        className="opacity-70 group-hover:opacity-100 flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600 transition cursor-pointer"
+                        title="Delete from knowledge base"
+                      >
+                        {deletingId === doc.doc_id ? (
+                          <Loader2 size={13} className="animate-spin text-red-500" />
+                        ) : (
+                          <Trash2 size={13} />
+                        )}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Quick Add at bottom */}
+              {documents.length > 0 && (
+                <div className="pt-3 border-t border-slate-100 mt-2">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 py-2 text-xs font-medium text-slate-600 hover:border-slate-900 hover:text-slate-900 transition cursor-pointer"
+                  >
+                    <FilePlus size={14} />
+                    <span>Upload Another PDF</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: CHAT HISTORY (PRESERVED SESSIONS LIKE CHATGPT) */}
+          {sidebarTab === "history" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Saved Consultations
+                </span>
+
+                <button
+                  onClick={handleNewChat}
+                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition cursor-pointer"
+                  title="New consultation"
+                >
+                  + New
+                </button>
+              </div>
+
+              {/* Sessions List */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-1.5">
+                {sessions.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-gray-400">
+                    <Clock size={24} className="mx-auto mb-2 text-slate-300" />
+                    <p className="text-xs font-medium text-slate-600">No past consultations</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Each conversation is automatically saved here</p>
+                  </div>
+                ) : (
+                  sessions.map((session) => {
+                    const isActive = session.session_id === currentSessionId;
+                    return (
+                      <div
+                        key={session.session_id}
+                        onClick={() => handleSelectSession(session.session_id)}
+                        className={`group w-full flex items-center justify-between gap-2 rounded-lg p-2.5 text-xs transition cursor-pointer ${
+                          isActive
+                            ? "bg-slate-900 text-white shadow-sm"
+                            : "text-slate-700 hover:bg-slate-100/80"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <MessageSquare 
+                            size={14} 
+                            className={`mt-0.5 shrink-0 ${
+                              isActive ? "text-yellow-400" : "text-slate-400 group-hover:text-slate-800"
+                            }`} 
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className={`truncate font-medium ${isActive ? "text-white" : "text-slate-800"}`}>
+                              {session.title || "Consultation"}
+                            </p>
+                            <p className={`text-[10px] mt-0.5 ${isActive ? "text-slate-400" : "text-slate-400"}`}>
+                              {session.updated_at 
+                                ? new Date(session.updated_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+                                : `${session.message_count || 0} messages`}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Delete Session Button */}
+                        <button
+                          onClick={(e) => handleDeleteSession(e, session.session_id)}
+                          className={`opacity-0 group-hover:opacity-100 p-1 rounded transition hover:text-red-400 cursor-pointer ${
+                            isActive ? "text-slate-400" : "text-slate-400 hover:bg-slate-200"
+                          }`}
+                          title="Delete consultation"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
         </aside>
 
         {/* Center Panel: Chat Interface */}
@@ -196,9 +487,16 @@ function Chat() {
                   {documents.length === 0 && (
                     <div className="mt-8 flex items-center gap-2 rounded-lg bg-yellow-50 p-4 border border-yellow-200 max-w-sm text-yellow-800 text-sm text-left">
                       <AlertCircle size={18} className="shrink-0 text-yellow-600" />
-                      <p>
-                        <strong>Note:</strong> You haven't uploaded any documents yet. Please <Link to="/upload" className="font-semibold underline">upload a PDF</Link> to query.
-                      </p>
+                      <div>
+                        <strong>No documents active:</strong> Click{" "}
+                        <button 
+                          onClick={() => fileInputRef.current?.click()} 
+                          className="font-semibold underline cursor-pointer"
+                        >
+                          + Add PDF
+                        </button>{" "}
+                        in the sidebar to begin.
+                      </div>
                     </div>
                   )}
                 </div>
@@ -206,13 +504,13 @@ function Chat() {
                 messages.map((msg, index) => (
                   <div
                     key={index}
-                    className={`flex gap-4 ${
+                    className={`flex gap-4 rounded-xl p-1 transition-all ${
                       msg.sender === "user" ? "justify-end" : "justify-start"
                     }`}
                   >
                     
                     {msg.sender === "ai" && (
-                      <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white font-serif text-xs font-bold">
+                      <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white font-serif text-xs font-bold shadow-sm">
                         AI
                       </div>
                     )}
@@ -259,7 +557,7 @@ function Chat() {
                     </div>
 
                     {msg.sender === "user" && (
-                      <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-800 font-semibold text-xs">
+                      <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-800 font-semibold text-xs shadow-sm">
                         You
                       </div>
                     )}
@@ -317,7 +615,7 @@ function Chat() {
 
         {/* Right Panel: Citations Inspector */}
         {activeCitations.length > 0 && (
-          <aside className="hidden w-[340px] flex-col border-l border-gray-200 bg-white xl:flex overflow-hidden">
+          <aside className="hidden w-[340px] flex-col border-l border-gray-200 bg-white xl:flex overflow-hidden shadow-sm">
             <div className="border-b border-gray-100 p-6">
               <h3 className="font-serif font-bold text-lg text-[#081827] flex items-center gap-2">
                 <Sparkles className="text-yellow-500" size={18} />

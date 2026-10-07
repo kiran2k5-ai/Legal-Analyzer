@@ -77,14 +77,47 @@ export const api = {
   },
 
   // Chat
-  async sendChatMessage(prompt) {
+  async sendChatMessage(prompt, sessionId = null) {
+    const payload = { prompt };
+    if (sessionId) payload.session_id = sessionId;
+
     const response = await fetch(`${API_BASE_URL}/chat/`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify(payload),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Failed to send chat message");
+    return data;
+  },
+
+  async getChatSessions() {
+    const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
+      method: "GET",
+      headers: getHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Failed to fetch sessions");
+    return data;
+  },
+
+  async getSessionDetail(sessionId) {
+    const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
+      method: "GET",
+      headers: getHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Failed to fetch session detail");
+    return data;
+  },
+
+  async deleteChatSession(sessionId) {
+    const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
+      method: "DELETE",
+      headers: getHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Failed to delete session");
     return data;
   },
 

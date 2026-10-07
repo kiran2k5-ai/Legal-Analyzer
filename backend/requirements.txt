@@ -13,4 +13,4 @@ requests
 python-multipart
 python-dotenv
 email-validator
-
+langchain-text-splitters
