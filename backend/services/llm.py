@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 from dotenv import load_dotenv
 
@@ -13,29 +14,40 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
 def generate_text(prompt: str, system_instruction: str = None) -> str:
     # 1. Use Groq if API Key is configured (Cloud / Render or Local)
     if GROQ_API_KEY:
-        try:
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            messages = []
-            if system_instruction:
-                messages.append({"role": "system", "content": system_instruction})
-            messages.append({"role": "user", "content": prompt})
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        messages = []
+        if system_instruction:
+            messages.append({"role": "system", "content": system_instruction})
+        messages.append({"role": "user", "content": prompt})
 
-            payload = {
-                "model": GROQ_MODEL,
-                "messages": messages,
-                "temperature": 0.2
-            }
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-        except Exception as e:
-            print(f"Error generating content via Groq: {e}")
-            return f"Error: Groq generation failed. Details: {str(e)}"
+        payload = {
+            "model": GROQ_MODEL,
+            "messages": messages,
+            "temperature": 0.2
+        }
+
+        # Retry up to 3 times on rate limit (429)
+        for attempt in range(3):
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=60)
+                if response.status_code == 429 and attempt < 2:
+                    wait_time = (attempt + 1) * 2
+                    print(f"Groq rate limit reached (429). Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+            except Exception as e:
+                if attempt == 2:
+                    print(f"Error generating content via Groq: {e}")
+                    return f"Error: Groq generation failed. Details: {str(e)}"
+                time.sleep(2)
 
     # 2. Fallback to local Ollama if no Groq API Key is present
     try:
@@ -53,4 +65,4 @@ def generate_text(prompt: str, system_instruction: str = None) -> str:
         return response.json().get("response", "")
     except Exception as e:
         print(f"Error generating content via Ollama: {e}")
-        return f"Error: Ollama generation failed. Please ensure Ollama is running and model '{OLLAMA_MODEL}' is downloaded. Details: {str(e)}"
+        return f"Error: Ollama generation failed. Details: {str(e)}"
