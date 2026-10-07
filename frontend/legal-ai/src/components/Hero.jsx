@@ -1,5 +1,5 @@
 import heroImage from "../assets/images/hero.jpg";
-import { Parallax } from "react-scroll-parallax";
+import { Link } from "react-router-dom";
 
 function Hero() {
   return (
@@ -31,13 +31,19 @@ function Hero() {
           </p>
 
           <div className="flex gap-4">
-            <button className="rounded bg-yellow-500 px-6 py-3 font-semibold text-black transition hover:bg-yellow-400">
+            <Link
+              to="/register"
+              className="rounded bg-yellow-500 px-6 py-3 font-semibold text-black transition hover:bg-yellow-400 inline-block cursor-pointer"
+            >
               Start New Analysis
-            </button>
+            </Link>
 
-            <button className="rounded border border-white px-6 py-3 font-semibold text-white transition hover:bg-white hover:text-black">
+            <Link
+              to="/register"
+              className="rounded border border-white px-6 py-3 font-semibold text-white transition hover:bg-white hover:text-black inline-block cursor-pointer"
+            >
               View Case Studies
-            </button>
+            </Link>
           </div>
         </div>
       </div>

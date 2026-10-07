@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 function CTA() {
   return (
     <section className="bg-[#F8F8F6] py-28">
@@ -19,13 +21,19 @@ function CTA() {
 
         <div className="mt-14 flex flex-col justify-center gap-5 sm:flex-row">
 
-          <button className="rounded-md bg-slate-900 px-8 py-4 font-semibold text-white transition hover:bg-black">
+          <Link
+            to="/register"
+            className="rounded-md bg-slate-900 px-8 py-4 font-semibold text-white transition hover:bg-black inline-block cursor-pointer"
+          >
             Start Free Analysis
-          </button>
+          </Link>
 
-          <button className="rounded-md border border-slate-300 px-8 py-4 font-semibold text-slate-900 transition hover:bg-slate-900 hover:text-white">
+          <Link
+            to="/register"
+            className="rounded-md border border-slate-300 px-8 py-4 font-semibold text-slate-900 transition hover:bg-slate-900 hover:text-white inline-block cursor-pointer"
+          >
             Learn More
-          </button>
+          </Link>
 
         </div>
 
