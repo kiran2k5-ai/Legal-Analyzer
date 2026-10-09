@@ -30,12 +30,16 @@ def generate_text(prompt: str, system_instruction: str = None) -> str:
             "temperature": 0.2
         }
 
-        # Retry up to 3 times on rate limit (429)
-        for attempt in range(3):
+        # Retry up to 4 times on rate limit (429)
+        for attempt in range(4):
             try:
                 response = requests.post(url, headers=headers, json=payload, timeout=60)
-                if response.status_code == 429 and attempt < 2:
-                    wait_time = (attempt + 1) * 2
+                if response.status_code == 429 and attempt < 3:
+                    retry_after = response.headers.get("retry-after")
+                    try:
+                        wait_time = float(retry_after) if retry_after else (attempt + 1) * 3
+                    except (ValueError, TypeError):
+                        wait_time = (attempt + 1) * 3
                     print(f"Groq rate limit reached (429). Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                     continue
@@ -44,9 +48,9 @@ def generate_text(prompt: str, system_instruction: str = None) -> str:
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
             except Exception as e:
-                if attempt == 2:
-                    print(f"Error generating content via Groq: {e}")
-                    return f"Error: Groq generation failed. Details: {str(e)}"
+                if attempt == 3:
+                    print(f"Error generating content via Groq: {e}. Falling back to Ollama if available...")
+                    break
                 time.sleep(2)
 
     # 2. Fallback to local Ollama if no Groq API Key is present

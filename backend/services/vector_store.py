@@ -1,46 +1,61 @@
 import chromadb
+import uuid
+import os
 
 client = chromadb.PersistentClient(path="chroma_db")
 
+COLLECTION_NAME = "legal_documents_v2"
+
 collection = client.get_or_create_collection(
-    name="legal_documents",
+    name=COLLECTION_NAME,
     metadata={"hnsw:space": "cosine"}
 )
 
-import uuid
+def clear_collection():
+    global collection
+    try:
+        client.delete_collection(COLLECTION_NAME)
+    except Exception:
+        pass
+
+    collection = client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"}
+    )
 
 def store_chunks(chunks, embeddings, filename="", doc_id="", user_email=""):
-    # If doc_id is not provided, generate one
+    global collection
     if not doc_id:
         doc_id = str(uuid.uuid4())
     ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
 
-    collection.add(
-        ids=ids,
-        documents=chunks,
-        embeddings=embeddings,
-        metadatas=[
-            {"document": filename, "chunk_index": i, "doc_id": doc_id, "user_email": user_email}
-            for i in range(len(chunks))
-        ]
-    )
+    metadatas = [
+        {"document": filename, "chunk_index": i, "doc_id": doc_id, "user_email": user_email}
+        for i in range(len(chunks))
+    ]
+
+    try:
+        collection.add(
+            ids=ids,
+            documents=chunks,
+            embeddings=embeddings,
+            metadatas=metadatas
+        )
+    except Exception as e:
+        if "dimension" in str(e).lower():
+            print("Dimension mismatch in ChromaDB. Resetting collection for new embedding model...")
+            clear_collection()
+            collection.add(
+                ids=ids,
+                documents=chunks,
+                embeddings=embeddings,
+                metadatas=metadatas
+            )
+        else:
+            raise e
 
     print("Chunks stored successfully!")
     return doc_id, ids
-
-
-def clear_collection():
-    global collection
-
-    try:
-        client.delete_collection("legal_documents")
-    except:
-        pass
-
-    collection = client.get_or_create_collection(
-        name="legal_documents",
-        metadata={"hnsw:space": "cosine"}
-    )
 
 def delete_document_vectors(doc_id):
     try:

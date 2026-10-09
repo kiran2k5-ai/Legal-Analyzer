@@ -66,7 +66,7 @@ def run_test():
 
     # 4. Generate Embeddings
     print("\n" + "-" * 80)
-    print("[STEP 4] Generating Vector Embeddings (Sentence Transformers / intfloat/e5-base-v2)...")
+    print("[STEP 4] Generating Vector Embeddings (Sentence Transformers / all-MiniLM-L6-v2)...")
     t0 = time.time()
     embeddings = get_documents_embeddings(chunks)
     t_embed = time.time() - t0
